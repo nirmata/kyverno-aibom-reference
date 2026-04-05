@@ -1,0 +1,94 @@
+apiVersion: policies.kyverno.io/v1alpha1
+kind: ImageValidatingPolicy
+metadata:
+  name: enforce-aibom-constraints
+  annotations:
+    policies.kyverno.io/title: Enforce AIBOM Constraints
+    policies.kyverno.io/description: >-
+      Extracts the AIBOM payload from the OCI attestation and enforces:
+      (1) agent frameworks must be in the approved list,
+      (2) prohibited tools (filesystem, shell_*) must not be declared,
+      (3) models must be in the approved list.
+      Uses c.category (not c.type) to filter components — c.type is the
+      CycloneDX field ("ml-model", "library"); c.category is the AIBOM
+      discriminator ("agent", "tool", "model").
+spec:
+  validationActions: [Deny]
+  webhookConfiguration:
+    timeoutSeconds: 15
+    failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  matchImageReferences:
+    # Update this glob to match your registry
+    - glob: "registry.example.com/agents/*"
+  attestors:
+    - name: ciPipeline
+      cosign:
+        keyless:
+          identities:
+            # Update subject to match your GitHub org and workflow path
+            - subject: "https://github.com/your-org/*/.github/workflows/*.yml@refs/heads/main"
+              issuer: "https://token.actions.githubusercontent.com"
+          ctlog:
+            url: "https://rekor.sigstore.dev"
+  attestations:
+    - name: aibom
+      intoto:
+        type: https://nirmata.com/aibom/v1
+  validations:
+    # Rule 1: every agent must use an approved framework.
+    # extractPayload() requires verifyAttestationSignatures() to have run first —
+    # the > 0 guard ensures extraction only runs on verified images.
+    # c.category is the AIBOM discriminator field; c.type is the CycloneDX type.
+    - expression: >-
+        images.containers.map(image,
+          verifyAttestationSignatures(image, attestations.aibom, [attestors.ciPipeline]) > 0
+          &&
+          extractPayload(image, attestations.aibom).components
+            .filter(c, c.category == "agent")
+            .all(c, c.framework in [
+              "anthropic_sdk",
+              "pydantic_ai",
+              "openai-agents",
+              "langchain",
+              "langchain_ts",
+              "mastra",
+              "voltagent",
+              "langchaingo"
+            ])
+        ).all(e, e)
+      message: "Agent framework is not in the approved list."
+
+    # Rule 2: filesystem and shell_* tools are prohibited.
+    - expression: >-
+        images.containers.map(image,
+          verifyAttestationSignatures(image, attestations.aibom, [attestors.ciPipeline]) > 0
+          &&
+          extractPayload(image, attestations.aibom).components
+            .filter(c, c.category == "tool")
+            .all(c, c.name != "filesystem" && !c.name.startsWith("shell_"))
+        ).all(e, e)
+      message: "Prohibited tool declared (filesystem or shell_*). Admission denied."
+
+    # Rule 3: models must be in the approved list.
+    # Extend this list as your organisation approves new models.
+    - expression: >-
+        images.containers.map(image,
+          verifyAttestationSignatures(image, attestations.aibom, [attestors.ciPipeline]) > 0
+          &&
+          extractPayload(image, attestations.aibom).components
+            .filter(c, c.category == "model")
+            .all(c, c.name in [
+              "claude-3-5-sonnet-20241022",
+              "claude-3-5-haiku-20241022",
+              "gpt-4o",
+              "gpt-4o-mini",
+              "llama-3.1-70b"
+            ])
+        ).all(e, e)
+      message: "Model is not in the approved list."

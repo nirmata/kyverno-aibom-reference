@@ -1,0 +1,46 @@
+# .aibom.yaml — aibom-scanner configuration
+# Place this file at the root of your repository.
+# https://nirmata.com/contact (private preview)
+
+# Limit scanning to specific languages (default: all supported)
+languages:
+  - typescript
+  - javascript
+
+# Only report findings above this confidence threshold (0.0–1.0)
+min_confidence: 0.7
+
+# Suppress known findings with a justification and optional expiry.
+# The id field matches the component name from the AIBOM JSON.
+suppressions: []
+# Example:
+# suppressions:
+#   - id: "runTestAgent"
+#     reason: "Test fixture — not a production agent"
+#     expires: "2026-12-31"
+
+# Add detection signatures for internal or niche frameworks.
+# No binary update required — these are pure YAML.
+custom_signatures: []
+# Example:
+# custom_signatures:
+#   - name: "my_internal_sdk"
+#     language: typescript
+#     import_paths: ["@myorg/ai-client"]
+#     agent_types: ["MyAgent"]
+#     tool_decorators: ["registerTool"]
+#     base_confidence: 0.85
+
+# Additional gitignore-style patterns to exclude from scanning
+ignore:
+  - "dist/**"
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
+  - "**/node_modules/**"
+
+# Nirmata Control Hub integration (optional)
+# Can also be set via AIBOM_PROXY_URL and AIBOM_PROXY_TOKEN env vars
+# proxy:
+#   url: http://nch.internal:8081
+#   namespace: production
+#   project: research-agent

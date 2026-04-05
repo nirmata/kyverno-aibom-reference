@@ -1,0 +1,19 @@
+{
+  "name": "research-agent",
+  "version": "1.0.0",
+  "description": "Example AI agent using @anthropic-ai/sdk — reference for nirmata/kyverno-aibom-reference",
+  "main": "dist/research-agent.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/research-agent.js",
+    "dev": "ts-node src/research-agent.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}

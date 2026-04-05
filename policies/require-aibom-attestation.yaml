@@ -1,0 +1,53 @@
+apiVersion: policies.kyverno.io/v1alpha1
+kind: ImageValidatingPolicy
+metadata:
+  name: require-aibom-attestation
+  annotations:
+    policies.kyverno.io/title: Require AIBOM Attestation
+    policies.kyverno.io/description: >-
+      Requires every agent Pod image to have a valid Nirmata AIBOM attestation
+      signed by the CI pipeline via Sigstore keyless signing. Images without a
+      valid attestation are blocked at admission.
+spec:
+  validationActions: [Deny]
+  webhookConfiguration:
+    timeoutSeconds: 15
+    failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  matchImageReferences:
+    # Scope to your agent registry — update this glob to match your registry
+    - glob: "registry.example.com/agents/*"
+  attestors:
+    - name: ciPipeline
+      cosign:
+        keyless:
+          identities:
+            # Update subject to match your GitHub org and workflow path
+            - subject: "https://github.com/your-org/*/.github/workflows/*.yml@refs/heads/main"
+              issuer: "https://token.actions.githubusercontent.com"
+          ctlog:
+            url: "https://rekor.sigstore.dev"
+  attestations:
+    - name: aibom
+      intoto:
+        # Must match the --type value passed to cosign attest in CI
+        type: https://nirmata.com/aibom/v1
+  validations:
+    # Step 1: verify the image was signed by the CI pipeline
+    - expression: >-
+        images.containers.map(image,
+          verifyImageSignatures(image, [attestors.ciPipeline])
+        ).all(e, e > 0)
+      message: "Image must be signed by the CI pipeline via Sigstore keyless signing."
+
+    # Step 2: verify the AIBOM attestation signature is valid
+    - expression: >-
+        images.containers.map(image,
+          verifyAttestationSignatures(image, attestations.aibom, [attestors.ciPipeline])
+        ).all(e, e > 0)
+      message: "Image must have a valid AIBOM attestation (https://nirmata.com/aibom/v1)."

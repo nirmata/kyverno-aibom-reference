@@ -1,0 +1,47 @@
+{
+  "bomFormat": "AIBOM",
+  "specVersion": "1.0",
+  "serialNumber": "urn:uuid:00000000-0000-0000-0000-000000000000",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-04-04T00:00:00Z",
+    "tools": [
+      {
+        "name": "aibom-scanner",
+        "version": "0.1.0"
+      }
+    ],
+    "component": {
+      "name": "kyverno-aibom-reference",
+      "source": {
+        "path": "kyverno-aibom-reference"
+      }
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "28292d-agent-1",
+      "type": "ml-model",
+      "category": "agent",
+      "name": "Anthropic",
+      "framework": "anthropic_sdk",
+      "file_path": "src/research-agent.ts",
+      "line_number": 3,
+      "confidence": 0.9,
+      "properties": [
+        {
+          "name": "language",
+          "value": "typescript"
+        }
+      ],
+      "risk_category": "limited-risk",
+      "nist_function": "MAP",
+      "risk_score": 1
+    }
+  ],
+  "relationships": [],
+  "workflows": [],
+  "total_components": 1,
+  "total_relationships": 0,
+  "total_workflows": 0
+}

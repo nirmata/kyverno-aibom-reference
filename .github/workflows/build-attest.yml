@@ -1,0 +1,91 @@
+name: Build and Attest AIBOM
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write       # Required for keyless cosign signing
+  security-events: write # Required for SARIF upload
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Install nctl ────────────────────────────────────────────────────────
+      - name: Install nctl
+        uses: nirmata/action-install-nctl-scan@v0.0.2
+
+      # ── Build image ─────────────────────────────────────────────────────────
+      - name: Build image and capture digest
+        id: build
+        run: |
+          IMAGE="registry.example.com/agents/research-agent:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+      # ── Generate AIBOM ──────────────────────────────────────────────────────
+      - name: Generate AIBOM
+        run: |
+          nctl agent aibom generate . \
+            --output json \
+            --file aibom-current.json
+
+      # ── Upload SARIF to GitHub Security tab ────────────────────────────────
+      - name: Generate SARIF report
+        run: |
+          nctl agent aibom generate . \
+            --output sarif \
+            --file results.sarif
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+
+      # ── Gate on baseline diff ───────────────────────────────────────────────
+      # On PRs: fail if any new agents, tools, or models were added that
+      # are not in the committed baseline (aibom-baseline.json).
+      # Update aibom-baseline.json deliberately when new agents are approved.
+      - name: Gate against approved baseline
+        run: |
+          nctl agent aibom diff aibom-baseline.json aibom-current.json \
+            --fail-on added
+
+      # ── Publish to NCH ──────────────────────────────────────────────────────
+      - name: Publish AIBOM to Nirmata Control Hub
+        if: github.ref == 'refs/heads/main'
+        run: nctl agent aibom publish aibom-current.json
+
+      # ── Save AIBOM as CI artifact ───────────────────────────────────────────
+      - name: Upload AIBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aibom-${{ github.sha }}
+          path: aibom-current.json
+          retention-days: 90
+
+      # ── Attest AIBOM to image digest ────────────────────────────────────────
+      # Only on main — PRs generate and gate but don't attest.
+      - name: Install cosign
+        if: github.ref == 'refs/heads/main'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Attest AIBOM to image digest
+        if: github.ref == 'refs/heads/main'
+        env:
+          COSIGN_EXPERIMENTAL: "1"   # Keyless signing via GitHub Actions OIDC
+        run: |
+          cosign attest \
+            --predicate aibom-current.json \
+            --type https://nirmata.com/aibom/v1 \
+            "${{ steps.build.outputs.image }}@${{ steps.build.outputs.digest }}"

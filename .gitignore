@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.js.map
+aibom-current.json
+results.sarif
+.env
+.env.local
